@@ -73,3 +73,4 @@ code { background: var(--accent); padding: 1px 4px; border-radius: 4px; }
 #toast { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 16px; border-radius: 10px; opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90%; z-index: 10; text-align: center; }
 #toast.show { opacity: 1; }
 .search { margin: 0 0 10px; }
+button.danger { background: #fbe4e1; color: var(--bad); }

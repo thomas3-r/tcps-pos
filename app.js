@@ -5,9 +5,9 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, setDoc, updateDoc, addDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp,
+  collection, doc, setDoc, updateDoc, addDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-import { firebaseConfig, OWNER_EMAIL_SHA256, EVENT_NAME } from './config.js';
+import { firebaseConfig, OWNER_EMAIL_SHA256, RESET_EMAIL_SHA256, EVENT_NAME } from './config.js';
 import { computeTotals, r2 } from './calc.js';
 import { PRODUCTS, CATEGORY_ORDER } from './products.js';
 
@@ -66,7 +66,9 @@ onAuthStateChanged(auth, async (user) => {
   if (!user) { S.view = 'login'; return render(); }
   S.email = user.email.toLowerCase();
   // Only the main managers must verify their email; cashiers just sign in.
-  const owner = OWNER_EMAIL_SHA256.includes(await sha256(S.email));
+  const hash = await sha256(S.email);
+  const owner = OWNER_EMAIL_SHA256.includes(hash);
+  S.canReset = RESET_EMAIL_SHA256.includes(hash);
   if (owner && !user.emailVerified) { S.view = 'verify'; return render(); }
   S.view = 'loading'; render();
   unsubs.push(onSnapshot(doc(db, 'staff', S.email), (snap) => {
@@ -104,7 +106,7 @@ function startData() {
   }));
   unsubs.push(onSnapshot(query(collection(db, 'sales'), where('cashierEmail', '==', S.email), where('day', '==', dayStr())),
     { includeMetadataChanges: true }, (s) => {
-      S.mySales = s.docs.map((d) => ({ id: d.id, _pending: d.metadata.hasPendingWrites, ...d.data() })).sort((a, b) => b.clientTs - a.clientTs);
+      S.mySales = s.docs.map((d) => ({ id: d.id, _pending: d.metadata.hasPendingWrites, ...d.data() })).filter((x) => x.status !== 'deleted').sort((a, b) => b.clientTs - a.clientTs);
       S.pending = S.mySales.filter((x) => x._pending).length;
       renderHeader();
       if (['today', 'receipt'].includes(S.view)) render();
@@ -118,7 +120,7 @@ function startData() {
 function watchDashDay() {
   if (dashUnsub) dashUnsub();
   dashUnsub = onSnapshot(query(collection(db, 'sales'), where('day', '==', S.dashDay)), (s) => {
-    S.allSales = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => b.clientTs - a.clientTs);
+    S.allSales = s.docs.map((d) => ({ id: d.id, ...d.data() })).filter((x) => x.status !== 'deleted').sort((a, b) => b.clientTs - a.clientTs);
     rerender();
   });
 }
@@ -198,7 +200,10 @@ function vAccount() {
     <p>${esc(S.staff?.name || '')} <span class="muted">${esc(S.email)}</span></p>
     <p>Role: <b>${isManager() ? 'Manager' : 'Cashier'}</b> · Device ${deviceId()}</p>
     <button class="ghost" data-act="signout">Sign out</button>
-    <p class="muted small">Don't sign out during the event if you are offline: you need internet to sign back in.</p></div>`;
+    <p class="muted small">Don't sign out during the event if you are offline: you need internet to sign back in.</p></div>
+    ${S.canReset ? `<div class="card"><h3>Clear test sales</h3>
+      <p class="small">Removes every sale from the dashboard, My sales and exports, on all phones, so you can start fresh. Items, prices, staff, locations and coupons stay. Needs internet.</p>
+      <button class="ghost danger" data-act="resetSales">Clear all sales</button></div>` : ''}`;
 }
 
 // ----- selling -----
@@ -255,8 +260,6 @@ function vCheckout() {
     <label>Discount on total
       <select id="discMode">
         <option value="none" ${sel === 'none' ? 'selected' : ''}>No discount</option>
-        <option value="percent" ${sel === 'percent' ? 'selected' : ''}>Percentage (%)</option>
-        <option value="amount" ${sel === 'amount' ? 'selected' : ''}>Amount (₹)</option>
         ${activeCoupons().map((c) => `<option value="c:${esc(c.code)}" ${sel === 'c:' + c.code ? 'selected' : ''}>${esc(c.label || c.code)} (${c.percent}%)</option>`).join('')}
       </select></label>
     ${d.mode === 'percent' || d.mode === 'amount' ? `<label>${d.mode === 'percent' ? 'Percent off' : 'Amount off (₹)'}<input id="discVal" type="number" inputmode="decimal" min="0" step="0.01" value="${esc(d.value)}"></label>` : ''}
@@ -522,6 +525,26 @@ document.addEventListener('click', async (e) => {
   if (d.togglecoupon) { const c = S.coupons.find((x) => x.id === d.togglecoupon); updateDoc(doc(db, 'coupons', c.id), { active: c.active === false }); return; }
   switch (d.act) {
     case 'signout': S.cart = new Map(); return signOut(auth);
+    case 'resetSales': {
+      if (!S.canReset) return;
+      if (!navigator.onLine) return toast('Connect to the internet first');
+      if ((prompt('This clears ALL sales on every phone. Type CLEAR to confirm.') || '').trim().toUpperCase() !== 'CLEAR') return toast('Nothing cleared');
+      t.disabled = true;
+      try {
+        // Sales are marked deleted rather than removed, so invoice numbers are never reused.
+        const snap = await getDocs(collection(db, 'sales'));
+        const live = snap.docs.filter((d) => d.data().status !== 'deleted');
+        for (let i = 0; i < live.length; i += 400) {
+          const b = writeBatch(db);
+          live.slice(i, i + 400).forEach((d) => b.update(d.ref, { status: 'deleted', deletedBy: S.email, deletedAt: new Date().toISOString() }));
+          await b.commit();
+        }
+        ls.set('tcps_backup', []);
+        toast(`${live.length} sales cleared`);
+      } catch (er) { toast('Could not clear: ' + er.code); }
+      t.disabled = false;
+      return;
+    }
     case 'verified':
       await auth.currentUser.reload(); await auth.currentUser.getIdToken(true);
       if (!auth.currentUser.emailVerified) return toast('Not verified yet. Check your inbox.');

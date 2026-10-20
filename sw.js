@@ -1,5 +1,5 @@
 // Caches the app and the Firebase SDK so the POS opens with no internet.
-const CACHE = 'tcps-pos-v3';
+const CACHE = 'tcps-pos-v4';
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './calc.js', './config.js', './products.js', './manifest.webmanifest', './logo.webp', './icon-192.png', './icon-512.png',
   FB + 'firebase-app.js', FB + 'firebase-auth.js', FB + 'firebase-firestore.js'];
