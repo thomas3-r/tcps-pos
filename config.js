@@ -14,6 +14,7 @@ export const firebaseConfig = {
 export const OWNER_EMAIL_SHA256 = [
   'c9d4159b74bc817918fef5ce5e8f8780380a0d875c47a4b97587d71af6576f64',
   'becf6931a640dfa4f8f0a686447349fd7d209f1b0e9e99ee039f277042b4378f',
+  '4ad85369eaac5e0e3dbdfdd6ee341d4297bf186b2fa718944e6556f5eb114c64',
 ];
 
 export const EVENT_NAME = 'TCPS Event';

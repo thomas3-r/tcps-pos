@@ -64,9 +64,10 @@ onAuthStateChanged(auth, async (user) => {
   S.user = user; S.staff = null; S.role = null;
   if (!user) { S.view = 'login'; return render(); }
   S.email = user.email.toLowerCase();
-  if (!user.emailVerified) { S.view = 'verify'; return render(); }
-  S.view = 'loading'; render();
+  // Only the main managers must verify their email; cashiers just sign in.
   const owner = OWNER_EMAIL_SHA256.includes(await sha256(S.email));
+  if (owner && !user.emailVerified) { S.view = 'verify'; return render(); }
+  S.view = 'loading'; render();
   unsubs.push(onSnapshot(doc(db, 'staff', S.email), (snap) => {
     S.staff = snap.exists() ? snap.data() : null;
     const active = S.staff && S.staff.active !== false;
@@ -567,7 +568,7 @@ document.addEventListener('submit', async (e) => {
     if (f.id === 'authForm') {
       const email = fd.get('email').trim(); const pw = fd.get('password');
       if (S.authView === 'reset') { await sendPasswordResetEmail(auth, email); toast('Reset email sent'); S.authView = 'signin'; return render(); }
-      if (S.authView === 'signup') { const c = await createUserWithEmailAndPassword(auth, email, pw); await sendEmailVerification(c.user); return; }
+      if (S.authView === 'signup') { const c = await createUserWithEmailAndPassword(auth, email, pw); if (OWNER_EMAIL_SHA256.includes(await sha256(email.toLowerCase()))) await sendEmailVerification(c.user); return; }
       await signInWithEmailAndPassword(auth, email, pw);
     }
     if (f.id === 'itemForm') {
