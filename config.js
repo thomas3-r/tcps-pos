@@ -17,4 +17,4 @@ export const OWNER_EMAIL_SHA256 = [
   '4ad85369eaac5e0e3dbdfdd6ee341d4297bf186b2fa718944e6556f5eb114c64',
 ];
 
-export const EVENT_NAME = 'TCPS Event';
+export const EVENT_NAME = 'Sidapur POS';

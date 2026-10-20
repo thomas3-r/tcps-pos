@@ -132,11 +132,12 @@ function rerender() {
 // ---------- rendering ----------
 function renderHeader() {
   const h = $('#header');
-  if (!S.role) { h.innerHTML = `<div class="brand">${esc(EVENT_NAME)} POS</div>`; return; }
+  const brand = `<div class="brand"><img src="logo.webp" alt="Sidapur Coffee"><span>POS</span></div>`;
+  if (!S.role) { h.innerHTML = brand; return; }
   const locs = myLocations();
   const online = navigator.onLine;
   h.innerHTML = `
-    <div class="brand">${esc(EVENT_NAME)}</div>
+    ${brand}
     <select id="locSel" ${locs.length < 2 ? 'disabled' : ''}>
       ${locs.length ? locs.map((l) => `<option value="${l.id}" ${l.id === S.locId ? 'selected' : ''}>${esc(l.name)}</option>`).join('') : '<option>No location</option>'}
     </select>
