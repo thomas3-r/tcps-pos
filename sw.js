@@ -1,5 +1,5 @@
 // Caches the app and the Firebase SDK so the POS opens with no internet.
-const CACHE = 'tcps-pos-v4';
+const CACHE = 'tcps-pos-v5';
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './calc.js', './config.js', './products.js', './manifest.webmanifest', './logo.webp', './icon-192.png', './icon-512.png',
   FB + 'firebase-app.js', FB + 'firebase-auth.js', FB + 'firebase-firestore.js'];
@@ -29,7 +29,8 @@ self.addEventListener('fetch', (e) => {
   }
   // App files: try the network so updates arrive, fall back to cache when offline.
   if (url.origin === location.origin) {
-    e.respondWith(fetch(e.request).then((res) => {
+    // no-cache: always check the server for a newer version, so updates show on the next open.
+    e.respondWith(fetch(e.request, { cache: 'no-cache' }).then((res) => {
       const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then((r) => r || caches.match('./index.html'))));
   }
