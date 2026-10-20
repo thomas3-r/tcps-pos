@@ -1,6 +1,6 @@
-// Product list for the Coffee Santhe counters (prices include GST).
+// Product list for the Coffee Santhe counters (prices include GST). Supplies have no price yet: set it in Manage → Items.
 // Managers load it once from Manage → Items; items that already exist by name are skipped.
-export const CATEGORY_ORDER = ['Hot Drinks', 'Coffee', 'Honey', 'Spices', 'Oils', 'Gift Boxes', 'Brewware'];
+export const CATEGORY_ORDER = ['Hot Drinks', 'Coffee', 'Honey', 'Spices', 'Oils', 'Gift Boxes', 'Brewware', 'Supplies'];
 
 export const PRODUCTS = [
   { name: "Espresso Bold Beans 500g", price: 960, category: 'Coffee' },
@@ -71,4 +71,10 @@ export const PRODUCTS = [
   { name: "Black Coffee", price: 50, category: 'Hot Drinks' },
   { name: "Milk Tea", price: 50, category: 'Hot Drinks' },
   { name: "Black Tea", price: 50, category: 'Hot Drinks' },
+  { name: 'Fresh Brew 200g', price: 0, category: 'Supplies' },
+  { name: '4 Peaks Tea 200g', price: 0, category: 'Supplies' },
+  { name: 'White Sugar (Full pack)', price: 0, category: 'Supplies' },
+  { name: 'Brown Sugar (Full pack)', price: 0, category: 'Supplies' },
+  { name: 'Stirrer', price: 0, category: 'Supplies' },
+  { name: 'Badam Powder', price: 0, category: 'Supplies' },
 ];
