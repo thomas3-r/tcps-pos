@@ -9,6 +9,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { firebaseConfig, OWNER_EMAIL_SHA256, EVENT_NAME } from './config.js';
 import { computeTotals, r2 } from './calc.js';
+import { PRODUCTS, CATEGORY_ORDER } from './products.js';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -88,7 +89,9 @@ function startData() {
     rerender();
   }));
   unsubs.push(onSnapshot(collection(db, 'items'), (s) => {
-    S.items = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.name || '').localeCompare(b.name || ''));
+    const rank = (c) => { const i = CATEGORY_ORDER.indexOf(c); return i < 0 ? 99 : i; };
+    S.items = s.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => rank(a.category) - rank(b.category) || (a.category || '').localeCompare(b.category || '') || (a.sort ?? 999) - (b.sort ?? 999) || (a.name || '').localeCompare(b.name || ''));
     rerender();
   }));
   unsubs.push(onSnapshot(collection(db, 'coupons'), (s) => {
@@ -204,11 +207,12 @@ function vSell() {
   if (!items.length) return `<div class="card"><p>No items yet.${isManager() ? ' Add them under Manage → Items.' : ''}</p></div>`;
   const cats = ['All', ...new Set(items.map((i) => i.category || 'Other'))];
   const shown = S.category === 'All' ? items : items.filter((i) => (i.category || 'Other') === S.category);
-  return `<div class="chips">${cats.map((c) => `<button data-cat="${esc(c)}" class="${c === S.category ? 'active' : ''}">${esc(c)}</button>`).join('')}</div>
+  return `<input id="itemSearch" type="search" placeholder="Search items" autocomplete="off" class="search">
+    <div class="chips">${cats.map((c) => `<button data-cat="${esc(c)}" class="${c === S.category ? 'active' : ''}">${esc(c)}</button>`).join('')}</div>
     <div class="grid">${shown.map((i) => {
       const q = S.cart.get(i.id) || 0;
       return `<button class="tile ${q ? 'in' : ''}" data-add="${i.id}">
-        <span class="name">${esc(i.name)}</span><span class="price">${inr(i.price)}</span>${q ? `<span class="qty">${q}</span>` : ''}</button>`;
+        <span class="name" data-name="${esc(i.name.toLowerCase())}">${esc(i.name)}</span><span class="price">${inr(i.price)}</span>${q ? `<span class="qty">${q}</span>` : ''}</button>`;
     }).join('')}</div>`;
 }
 function cartLines() {
@@ -432,6 +436,9 @@ function mItems() {
   }
   return `<div class="card"><div class="row"><h2>Items</h2><button class="primary" data-act="newItem">+ Add</button></div>
     ${S.items.map((i) => `<div class="sale" data-edititem="${i.id}"><div><b>${esc(i.name)}</b><br><span class="small muted">${esc(i.category || 'Other')}${i.active === false ? ' · hidden' : ''}</span></div><div class="right"><b>${inr(i.price)}</b><br><span class="small">Edit</span></div></div>`).join('') || '<p class="muted">No items yet.</p>'}</div>
+    ${PRODUCTS.some((p) => !S.items.find((i) => i.name === p.name)) ? `<div class="card"><h3>Event product list</h3>
+      <p class="small">Load the ${PRODUCTS.length} Coffee Santhe products and hot drinks. Items you already have are skipped.</p>
+      <button class="primary" data-act="importProducts">Load product list</button></div>` : ''}
     <div class="card"><h3>Bulk add</h3><p class="small muted">One item per line: <code>Name, Price incl GST, Category</code></p>
       <textarea id="bulk" rows="6" placeholder="Filter Coffee, 30, Beverages&#10;Masala Tea, 20, Beverages"></textarea>
       <button class="ghost" data-act="bulkAdd">Add these items</button></div>`;
@@ -536,6 +543,12 @@ document.addEventListener('click', async (e) => {
     case 'newItem': S.editItem = { name: '', price: '', category: '', active: true }; return render();
     case 'newStaff': S.editStaff = { role: 'cashier', locations: [], active: true }; return render();
     case 'cancelEdit': S.editItem = S.editStaff = null; return render();
+    case 'importProducts': {
+      const have = new Set(S.items.map((i) => i.name));
+      const add = PRODUCTS.map((p, n) => ({ ...p, sort: n })).filter((p) => !have.has(p.name));
+      add.forEach((p) => saveItem(null, { name: p.name, price: p.price, category: p.category, active: true, sort: p.sort }));
+      return toast(`${add.length} items added`);
+    }
     case 'bulkAdd': {
       const rows = $('#bulk').value.split('\n').map((r) => r.split(',').map((x) => x.trim())).filter((r) => r[0]);
       const bad = rows.filter((r) => !(Number(r[1]) >= 0) || r[1] === undefined || r[1] === '');
@@ -556,6 +569,10 @@ document.addEventListener('change', (e) => {
   if (t.id === 'dashDay') { S.dashDay = t.value || dayStr(); watchDashDay(); }
 });
 document.addEventListener('input', (e) => {
+  if (e.target.id === 'itemSearch') {
+    const q = e.target.value.trim().toLowerCase();
+    document.querySelectorAll('.tile').forEach((t) => { t.style.display = !q || t.querySelector('.name').dataset.name.includes(q) ? '' : 'none'; });
+  }
   if (e.target.id === 'discVal') { S.discount.value = e.target.value; updateTotals(); }
   if (e.target.id === 'csrRef') S.csrRef = e.target.value;
   if (e.target.id === 'cashIn') { S.cashGiven = e.target.value; updateChange(computeTotals(cartLines(), discountSpec()).net); }
