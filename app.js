@@ -5,7 +5,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  collection, doc, setDoc, updateDoc, addDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch,
+  collection, doc, setDoc, updateDoc, addDoc, onSnapshot, query, where, orderBy, limit, serverTimestamp, getDocs, writeBatch, deleteDoc,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { firebaseConfig, OWNER_EMAIL_SHA256, RESET_EMAIL_SHA256, EVENT_NAME } from './config.js';
 import { computeTotals, r2 } from './calc.js';
@@ -69,6 +69,7 @@ onAuthStateChanged(auth, async (user) => {
   const hash = await sha256(S.email);
   const owner = OWNER_EMAIL_SHA256.includes(hash);
   S.canReset = RESET_EMAIL_SHA256.includes(hash);
+  S.isOwner = owner;
   if (owner && !user.emailVerified) { S.view = 'verify'; return render(); }
   S.view = 'loading'; render();
   unsubs.push(onSnapshot(doc(db, 'staff', S.email), (snap) => {
@@ -465,7 +466,8 @@ function mStaff() {
       <label>Role<select name="role"><option value="cashier" ${s.role !== 'manager' ? 'selected' : ''}>Cashier (POS only)</option><option value="manager" ${s.role === 'manager' ? 'selected' : ''}>Manager</option></select></label>
       <fieldset><legend>Locations (cashiers)</legend>${S.locations.map((l) => `<label class="check"><input type="checkbox" name="loc" value="${l.id}" ${(s.locations || []).includes(l.id) ? 'checked' : ''}> ${esc(l.name)}</label>`).join('') || '<p class="muted small">Add locations first.</p>'}</fieldset>
       <label class="check"><input type="checkbox" name="active" ${s.active !== false ? 'checked' : ''}> Access enabled</label>
-      <button class="primary big">Save</button><button type="button" class="ghost" data-act="cancelEdit">Cancel</button></form>
+      <button class="primary big">Save</button><button type="button" class="ghost" data-act="cancelEdit">Cancel</button>
+      ${s.id && S.isOwner && s.id !== S.email ? '<button type="button" class="ghost danger" data-act="deleteStaff">Delete user</button>' : ''}</form>
       <p class="small muted">After saving, the person opens the app, taps "First time? Set your password" and uses this email.</p></div>`;
   }
   const locName = (id) => S.locations.find((l) => l.id === id)?.name || '?';
@@ -575,6 +577,13 @@ document.addEventListener('click', async (e) => {
     case 'exportLines': return exportLines(S.allSales, `invoice-lines-${S.dashDay}.csv`);
     case 'newItem': S.editItem = { name: '', price: '', category: '', active: true }; return render();
     case 'newStaff': S.editStaff = { role: 'cashier', locations: [], active: true }; return render();
+    case 'deleteStaff': {
+      const id = S.editStaff?.id;
+      if (!id || !S.isOwner) return;
+      if (!confirm(`Delete ${S.editStaff.name || id}? They lose access straight away. Their past sales stay in the records.`)) return;
+      deleteDoc(doc(db, 'staff', id)).catch((er) => toast('Delete failed: ' + er.code));
+      S.editStaff = null; render(); return toast('User deleted');
+    }
     case 'cancelEdit': S.editItem = S.editStaff = null; return render();
     case 'importProducts': {
       const have = new Set(S.items.map((i) => i.name));
