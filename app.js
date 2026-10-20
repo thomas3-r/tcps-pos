@@ -162,7 +162,16 @@ function render() {
   const m = $('#main');
   const views = { login: vLogin, verify: vVerify, loading: () => '<p class="muted center">Loading…</p>', noaccess: vNoAccess,
     sell: vSell, checkout: vCheckout, receipt: vReceipt, today: vToday, dash: vDash, manage: vManage, account: vAccount };
+  // Keep the category ribbon where it was scrolled to; redrawing would otherwise jump it back to "All".
+  const chipsX = render.lastView === S.view ? m.querySelector('.chips')?.scrollLeft || 0 : 0;
+  render.lastView = S.view;
   m.innerHTML = (views[S.view] || vSell)();
+  const chips = m.querySelector('.chips');
+  if (chips) {
+    chips.scrollLeft = chipsX;
+    const active = chips.querySelector('.active');
+    if (active && (active.offsetLeft < chips.scrollLeft || active.offsetLeft + active.offsetWidth > chips.scrollLeft + chips.clientWidth)) active.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+  }
   $('#cartbar').innerHTML = S.view === 'sell' ? cartBar() : '';
   if (S.view === 'checkout') updateTotals();
 }
