@@ -65,12 +65,13 @@ onAuthStateChanged(auth, async (user) => {
   S.user = user; S.staff = null; S.role = null;
   if (!user) { S.view = 'login'; return render(); }
   S.email = user.email.toLowerCase();
-  // Only the main managers must verify their email; cashiers just sign in.
+  // Main managers get full access once their email is verified. Until then they can still
+  // get in through a staff entry (e.g. added as Manager under Manage → Staff).
   const hash = await sha256(S.email);
-  const owner = OWNER_EMAIL_SHA256.includes(hash);
-  S.canReset = RESET_EMAIL_SHA256.includes(hash);
+  const ownerEmail = OWNER_EMAIL_SHA256.includes(hash);
+  const owner = ownerEmail && user.emailVerified;
+  S.canReset = owner && RESET_EMAIL_SHA256.includes(hash);
   S.isOwner = owner;
-  if (owner && !user.emailVerified) { S.view = 'verify'; return render(); }
   S.view = 'loading'; render();
   unsubs.push(onSnapshot(doc(db, 'staff', S.email), (snap) => {
     S.staff = snap.exists() ? snap.data() : null;
@@ -78,10 +79,10 @@ onAuthStateChanged(auth, async (user) => {
     const role = owner ? 'manager' : active ? (S.staff.role || 'cashier') : null;
     const first = S.role === null;
     S.role = role;
-    if (!role) { S.view = 'noaccess'; return render(); }
+    if (!role) { S.view = ownerEmail && !owner ? 'verify' : 'noaccess'; return render(); }
     if (first) { startData(); S.view = 'sell'; }
     render();
-  }, (err) => { console.error(err); S.view = 'noaccess'; render(); }));
+  }, (err) => { console.error(err); S.view = ownerEmail && !owner ? 'verify' : 'noaccess'; render(); }));
 });
 
 function startData() {
@@ -195,7 +196,7 @@ function vLogin() {
 }
 function vVerify() {
   return `<div class="card narrow"><h2>Verify your email</h2>
-    <p>We sent a link to <b>${esc(S.user?.email)}</b>. Open it, then tap Continue.</p>
+    <p>We sent a link to <b>${esc(S.user?.email)}</b>. Open it, then tap Continue. Check the Spam or Junk folder if it isn't in the inbox.</p>
     <button class="primary big" data-act="verified">Continue</button>
     <button class="ghost" data-act="resendVerify">Resend email</button>
     <button class="ghost" data-act="signout">Sign out</button></div>`;
