@@ -9,7 +9,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { firebaseConfig, OWNER_EMAIL_SHA256, RESET_EMAIL_SHA256, EVENT_NAME } from './config.js';
 import { computeTotals, r2 } from './calc.js';
-import { PRODUCTS, CATEGORY_ORDER } from './products.js';
+import { PRODUCTS, CATEGORY_ORDER, MENU_NAME } from './products.js';
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -451,9 +451,9 @@ function mItems() {
   }
   return `<div class="card"><div class="row"><h2>Items</h2><button class="primary" data-act="newItem">+ Add</button></div>
     ${S.items.map((i) => `<div class="sale" data-edititem="${i.id}"><div><b>${esc(i.name)}</b><br><span class="small muted">${esc(i.category || 'Other')}${i.active === false ? ' · hidden' : ''}</span></div><div class="right"><b>${inr(i.price)}</b><br><span class="small">Edit</span></div></div>`).join('') || '<p class="muted">No items yet.</p>'}</div>
-    ${PRODUCTS.some((p) => !S.items.find((i) => i.name === p.name)) ? `<div class="card"><h3>Event product list</h3>
-      <p class="small">Load the ${PRODUCTS.length} Coffee Santhe products and hot drinks. Items you already have are skipped.</p>
-      <button class="primary" data-act="importProducts">Load product list</button></div>` : ''}
+    ${menuDiff().count ? `<div class="card"><h3>${esc(MENU_NAME)}</h3>
+      <p class="small">${menuDiff().summary}. Items not on the menu are hidden, not deleted, so past sales stay intact.</p>
+      <button class="primary" data-act="importProducts">Switch to this menu</button></div>` : ''}
     <div class="card"><h3>Bulk add</h3><p class="small muted">One item per line: <code>Name, Price incl GST, Category</code></p>
       <textarea id="bulk" rows="6" placeholder="Filter Coffee, 30, Beverages&#10;Masala Tea, 20, Beverages"></textarea>
       <button class="ghost" data-act="bulkAdd">Add these items</button></div>`;
@@ -494,6 +494,20 @@ function mLog() {
       <div class="right small muted">${new Date(e.at).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}<br>${esc(e.by)}</div></div>`).join('') || '<p class="muted">No changes yet.</p>'}</div>`;
 }
 
+// Compares the live items with the menu in products.js.
+function menuDiff() {
+  const menu = PRODUCTS.map((p, n) => ({ ...p, sort: n }));
+  const names = new Set(menu.map((p) => p.name));
+  const add = [], update = [];
+  for (const p of menu) {
+    const item = S.items.find((i) => i.name === p.name);
+    if (!item) add.push(p);
+    else if (item.price !== p.price || item.category !== p.category || item.active === false) update.push({ item, p });
+  }
+  const hide = S.items.filter((i) => !names.has(i.name) && i.active !== false);
+  const parts = [add.length && `${add.length} to add`, update.length && `${update.length} to update`, hide.length && `${hide.length} to hide`].filter(Boolean);
+  return { add, update, hide, count: add.length + update.length + hide.length, summary: parts.join(', ') };
+}
 async function saveItem(id, data) {
   const before = id ? S.items.find((i) => i.id === id) || {} : {};
   const changes = {};
@@ -587,10 +601,12 @@ document.addEventListener('click', async (e) => {
     }
     case 'cancelEdit': S.editItem = S.editStaff = null; return render();
     case 'importProducts': {
-      const have = new Set(S.items.map((i) => i.name));
-      const add = PRODUCTS.map((p, n) => ({ ...p, sort: n })).filter((p) => !have.has(p.name));
-      add.forEach((p) => saveItem(null, { name: p.name, price: p.price, category: p.category, active: true, sort: p.sort }));
-      return toast(`${add.length} items added`);
+      const d = menuDiff();
+      if (!confirm(`Switch to the ${MENU_NAME}? ${d.summary}.`)) return;
+      d.add.forEach((p) => saveItem(null, { name: p.name, price: p.price, category: p.category, active: true, sort: p.sort }));
+      d.update.forEach(({ item, p }) => saveItem(item.id, { name: p.name, price: p.price, category: p.category, active: true, sort: p.sort }));
+      d.hide.forEach((i) => saveItem(i.id, { name: i.name, price: i.price, category: i.category, active: false }));
+      return toast('Menu updated');
     }
     case 'bulkAdd': {
       const rows = $('#bulk').value.split('\n').map((r) => r.split(',').map((x) => x.trim())).filter((r) => r[0]);
